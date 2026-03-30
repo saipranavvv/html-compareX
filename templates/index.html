@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML-CompareX — Visual Diff Tool</title>
+    <meta name="description" content="SSIM-based visual comparison tool for HTML report screenshots. Upload two images or capture HTML pages and instantly see differences highlighted.">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+        <h1>HTML-CompareX</h1>
+        <p>SSIM-powered visual diff for HTML reports</p>
+    </header>
+
+    <!-- Mode Toggle -->
+    <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="upload" id="mode-upload-btn">📤 Upload Screenshots</button>
+        <button class="mode-btn" data-mode="html" id="mode-html-btn">🌐 HTML Path / URL</button>
+    </div>
+
+    <!-- Upload Mode -->
+    <section class="input-section active" id="section-upload">
+        <div class="upload-grid">
+            <div class="upload-zone" id="zone1">
+                <input type="file" accept="image/*" id="file1">
+                <span class="upload-icon">🖼️</span>
+                <h3>Screenshot A (Baseline)</h3>
+                <p>Drop image or click to browse</p>
+                <div class="upload-preview" id="preview1"><img></div>
+                <div class="upload-filename" id="fname1"></div>
+            </div>
+            <div class="upload-zone" id="zone2">
+                <input type="file" accept="image/*" id="file2">
+                <span class="upload-icon">🖼️</span>
+                <h3>Screenshot B (Changed)</h3>
+                <p>Drop image or click to browse</p>
+                <div class="upload-preview" id="preview2"><img></div>
+                <div class="upload-filename" id="fname2"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HTML Path Mode -->
+    <section class="input-section" id="section-html">
+        <div class="html-input-grid">
+            <div class="path-input-group">
+                <label>HTML Path / URL — Baseline</label>
+                <input type="text" id="html_path1" placeholder="/path/to/report_v1.html or https://...">
+            </div>
+            <div class="path-input-group">
+                <label>HTML Path / URL — Changed</label>
+                <input type="text" id="html_path2" placeholder="/path/to/report_v2.html or https://...">
+            </div>
+        </div>
+    </section>
+
+    <!-- Compare Button -->
+    <div class="compare-btn-container">
+        <button class="compare-btn" id="compare-btn">
+            <span class="spinner"></span>
+            <span class="btn-text">Compare Screenshots</span>
+        </button>
+    </div>
+
+    <!-- Results -->
+    <section class="results-section" id="results">
+        <!-- Score Card -->
+        <div class="score-card">
+            <h2>Comparison Results</h2>
+            <div class="score-display">
+                <div class="score-ring">
+                    <svg viewBox="0 0 128 128">
+                        <circle class="ring-bg" cx="64" cy="64" r="60"/>
+                        <circle class="ring-fill" id="ring-fill" cx="64" cy="64" r="60"/>
+                    </svg>
+                    <div class="score-text">
+                        <span class="score-value" id="score-value">—</span>
+                        <span class="score-label">SSIM</span>
+                    </div>
+                </div>
+                <div class="score-details">
+                    <div class="score-detail-row">
+                        <span class="dot" style="background: var(--accent-blue)"></span>
+                        <span class="label">SSIM Score</span>
+                        <span class="value" id="detail-ssim">—</span>
+                    </div>
+                    <div class="score-detail-row">
+                        <span class="dot" style="background: var(--accent-red)"></span>
+                        <span class="label">Difference</span>
+                        <span class="value" id="detail-diff">—</span>
+                    </div>
+                    <div class="score-detail-row">
+                        <span class="dot" style="background: var(--accent-green)"></span>
+                        <span class="label">Verdict</span>
+                        <span class="value" id="detail-verdict">
+                            <span class="verdict-badge" id="verdict-badge">—</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Grid -->
+        <div class="results-grid">
+            <div class="result-card">
+                <div class="result-card-header">
+                    <span class="card-icon">🅰️</span>
+                    <h3>Baseline</h3>
+                </div>
+                <div class="result-card-body">
+                    <img id="res-img1" alt="Baseline screenshot">
+                </div>
+            </div>
+            <div class="result-card">
+                <div class="result-card-header">
+                    <span class="card-icon">🅱️</span>
+                    <h3>Changed</h3>
+                </div>
+                <div class="result-card-body">
+                    <img id="res-img2" alt="Changed screenshot">
+                </div>
+            </div>
+            <div class="result-card">
+                <div class="result-card-header">
+                    <span class="card-icon">🔍</span>
+                    <h3>Diff Overlay</h3>
+                </div>
+                <div class="result-card-body">
+                    <img id="res-overlay" alt="Difference overlay with highlighted regions">
+                </div>
+            </div>
+            <div class="result-card">
+                <div class="result-card-header">
+                    <span class="card-icon">🌡️</span>
+                    <h3>Heatmap</h3>
+                </div>
+                <div class="result-card-body">
+                    <img id="res-heatmap" alt="SSIM difference heatmap">
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<!-- Error Toast -->
+<div class="error-toast" id="error-toast"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    // --- DOM refs ---
+    const modeBtns     = document.querySelectorAll('.mode-btn');
+    const sectionUpload = document.getElementById('section-upload');
+    const sectionHtml   = document.getElementById('section-html');
+    const compareBtn    = document.getElementById('compare-btn');
+    const resultsEl     = document.getElementById('results');
+    const errorToast    = document.getElementById('error-toast');
+
+    let currentMode = 'upload';
+
+    // --- Mode toggle ---
+    modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            modeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentMode = btn.dataset.mode;
+            sectionUpload.classList.toggle('active', currentMode === 'upload');
+            sectionHtml.classList.toggle('active', currentMode === 'html');
+        });
+    });
+
+    // --- File upload preview ---
+    function setupZone(fileId, zoneId, previewId, fnameId) {
+        const input   = document.getElementById(fileId);
+        const zone    = document.getElementById(zoneId);
+        const preview = document.getElementById(previewId);
+        const fname   = document.getElementById(fnameId);
+
+        input.addEventListener('change', () => {
+            const file = input.files[0];
+            if (!file) return;
+            zone.classList.add('has-file');
+            fname.textContent = '✅ ' + file.name;
+            fname.style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                preview.querySelector('img').src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    setupZone('file1', 'zone1', 'preview1', 'fname1');
+    setupZone('file2', 'zone2', 'preview2', 'fname2');
+
+    // --- Error handling ---
+    let errorTimer;
+    function showError(msg) {
+        errorToast.textContent = msg;
+        errorToast.classList.add('visible');
+        clearTimeout(errorTimer);
+        errorTimer = setTimeout(() => errorToast.classList.remove('visible'), 5000);
+    }
+
+    // --- Score ring animation ---
+    function setScore(score, diffPct) {
+        const circumference = 2 * Math.PI * 60; // r=60
+        const ringFill = document.getElementById('ring-fill');
+        const offset = circumference * (1 - score);
+        ringFill.style.strokeDasharray = circumference;
+
+        // Color based on score
+        let color;
+        if (score >= 0.98) color = 'var(--accent-green)';
+        else if (score >= 0.90) color = 'var(--accent-yellow)';
+        else color = 'var(--accent-red)';
+
+        ringFill.style.stroke = color;
+        requestAnimationFrame(() => {
+            ringFill.style.strokeDashoffset = offset;
+        });
+
+        document.getElementById('score-value').textContent = score.toFixed(4);
+        document.getElementById('detail-ssim').textContent = score.toFixed(6);
+        document.getElementById('detail-diff').textContent = diffPct.toFixed(2) + '%';
+
+        const badge = document.getElementById('verdict-badge');
+        badge.className = 'verdict-badge';
+        if (score >= 0.98) {
+            badge.textContent = 'Virtually Identical';
+            badge.classList.add('identical');
+        } else if (score >= 0.90) {
+            badge.textContent = 'Minor Differences';
+            badge.classList.add('minor');
+        } else {
+            badge.textContent = 'Significant Changes';
+            badge.classList.add('significant');
+        }
+    }
+
+    // --- Compare ---
+    compareBtn.addEventListener('click', async () => {
+        const formData = new FormData();
+        formData.append('mode', currentMode);
+
+        if (currentMode === 'upload') {
+            const f1 = document.getElementById('file1').files[0];
+            const f2 = document.getElementById('file2').files[0];
+            if (!f1 || !f2) { showError('Please upload both screenshots.'); return; }
+            formData.append('image1', f1);
+            formData.append('image2', f2);
+        } else {
+            const p1 = document.getElementById('html_path1').value.trim();
+            const p2 = document.getElementById('html_path2').value.trim();
+            if (!p1 || !p2) { showError('Please enter both HTML paths / URLs.'); return; }
+            formData.append('html_path1', p1);
+            formData.append('html_path2', p2);
+        }
+
+        compareBtn.classList.add('loading');
+        compareBtn.disabled = true;
+        resultsEl.classList.remove('visible');
+
+        try {
+            const res = await fetch('/compare', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (data.error) { showError(data.error); return; }
+
+            // Populate images
+            document.getElementById('res-img1').src     = 'data:image/png;base64,' + data.image1;
+            document.getElementById('res-img2').src     = 'data:image/png;base64,' + data.image2;
+            document.getElementById('res-overlay').src  = 'data:image/png;base64,' + data.overlay;
+            document.getElementById('res-heatmap').src  = 'data:image/png;base64,' + data.heatmap;
+
+            // Reset ring animation
+            document.getElementById('ring-fill').style.strokeDashoffset = 2 * Math.PI * 60;
+
+            resultsEl.classList.add('visible');
+
+            // Animate score after a tick
+            setTimeout(() => setScore(data.score, data.percentage), 100);
+
+            // Scroll to results
+            resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+            showError('Request failed: ' + err.message);
+        } finally {
+            compareBtn.classList.remove('loading');
+            compareBtn.disabled = false;
+        }
+    });
+})();
+</script>
+</body>
+</html>
